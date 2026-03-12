@@ -496,49 +496,7 @@ const searchArticles = async (query: string): Promise<Article[]> => {
 
 **解决**：升级到 Suite Team 或更高计划。
 
-### 6.2 Node.js fetch SSL 证书错误
 
-**现象**：
-
-```
-TypeError: fetch failed
-  [cause]: Error: self-signed certificate in certificate chain
-    code: 'SELF_SIGNED_CERT_IN_CHAIN'
-```
-
-**原因**：企业网络环境存在 SSL 中间人代理（如 Zscaler、公司防火墙），注入了自签名证书。Node.js 22 内置的 `fetch`（基于 undici）默认严格验证 SSL 证书。
-
-**解决**：
-
-```javascript
-import { Agent } from 'undici';
-
-const tlsAgent = new Agent({ connect: { rejectUnauthorized: false } });
-
-// 在 fetch 中使用
-fetch(url, { dispatcher: tlsAgent });
-```
-
-> ⚠️ `NODE_TLS_REJECT_UNAUTHORIZED=0` 对 Node.js 22 的内置 `fetch` **不生效**，因为它使用 undici 而非 `node:http`/`node:https`。必须使用 undici 的 `Agent` + `dispatcher` 参数。
-
-> ⚠️ 生产环境应配置正确的 CA 证书（`NODE_EXTRA_CA_CERTS` 环境变量），而非跳过验证。
-
-### 6.3 API Token 认证返回 Anonymous user
-
-**现象**：`/api/v2/users/me` 返回 200 但用户信息为 `"Anonymous user"`。
-
-**原因**：API Token 格式错误，或 Token Access 未启用。
-
-**验证**：
-
-```bash
-curl "https://{subdomain}.zendesk.com/api/v2/users/me.json" \
-  -u "{email}/token:{api_token}"
-```
-
-确认返回的是你的真实用户信息（name、email、role 为 admin/agent）。
-
----
 
 ## 附录：Help Center 数据结构
 

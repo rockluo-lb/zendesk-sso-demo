@@ -41,9 +41,6 @@
 - 核心 API 端点（Categories / Sections / Articles / Search）
 - 后端代理层实现（Node.js / Java / Python）
 - 前端集成示例（React）
-- 踩坑记录（SSL 证书、认证问题、计划限制）
-
-**状态：⚠️ 需要 Suite 系列计划（含 Guide 模块）**
 
 ---
 

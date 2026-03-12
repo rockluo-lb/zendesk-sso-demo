@@ -1,8 +1,11 @@
 import 'dotenv/config';
 import crypto from 'node:crypto';
+import { Agent } from 'undici';
 import cors from 'cors';
 import express from 'express';
 import jwt from 'jsonwebtoken';
+
+const tlsAgent = new Agent({ connect: { rejectUnauthorized: false } });
 
 const app = express();
 
@@ -10,8 +13,15 @@ const {
   ZENDESK_SHARED_SECRET = '',
   ZENDESK_SUBDOMAIN = 'lifebyte-28216',
   ZENDESK_RETURN_TO = 'https://lifebyte-28216.zendesk.com/agent/home/tickets',
+  ZENDESK_API_EMAIL = '',
+  ZENDESK_API_TOKEN = '',
   PORT = '3001',
 } = process.env;
+
+const ZD_BASE = `https://${ZENDESK_SUBDOMAIN}.zendesk.com`;
+const ZD_AUTH = ZENDESK_API_TOKEN
+  ? `Basic ${Buffer.from(`${ZENDESK_API_EMAIL}/token:${ZENDESK_API_TOKEN}`).toString('base64')}`
+  : '';
 
 app.use(cors());
 
@@ -82,6 +92,38 @@ app.get('/zendesk/bridge', (req, res) => {
 </body>
 </html>`);
 });
+
+async function zdFetch(path) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (ZD_AUTH) headers['Authorization'] = ZD_AUTH;
+  const res = await fetch(`${ZD_BASE}${path}`, { headers, dispatcher: tlsAgent });
+  return { status: res.status, data: await res.json() };
+}
+
+app.get('/zendesk/hc/health', (_req, res) => {
+  res.json({
+    hasApiToken: ZENDESK_API_TOKEN.length > 0,
+    apiEmail: ZENDESK_API_EMAIL,
+    subdomain: ZENDESK_SUBDOMAIN,
+  });
+});
+
+function hcProxy(pathFn) {
+  return async (req, res) => {
+    const path = typeof pathFn === 'function' ? pathFn(req) : pathFn;
+    const result = await zdFetch(path).catch((err) => ({
+      status: 502,
+      data: { error: 'Zendesk API request failed', detail: err.message },
+    }));
+    res.status(result.status).json(result.data);
+  };
+}
+
+app.get('/zendesk/hc/categories', hcProxy('/api/v2/help_center/categories'));
+app.get('/zendesk/hc/categories/:id/sections', hcProxy((req) => `/api/v2/help_center/categories/${req.params.id}/sections`));
+app.get('/zendesk/hc/sections/:id/articles', hcProxy((req) => `/api/v2/help_center/sections/${req.params.id}/articles`));
+app.get('/zendesk/hc/articles/:id', hcProxy((req) => `/api/v2/help_center/articles/${req.params.id}`));
+app.get('/zendesk/hc/search', hcProxy((req) => `/api/v2/help_center/articles/search?query=${encodeURIComponent(req.query.query ?? '')}`));
 
 app.listen(Number(PORT), () => {
   console.log(`\n  Zendesk Bridge Server running at http://localhost:${PORT}`);

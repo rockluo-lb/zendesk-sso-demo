@@ -29,7 +29,7 @@ type Config = {
 };
 
 const DEFAULT_CONFIG: Config = {
-  target: 'https://lifebyte-28216.zendesk.com/agent/home/tickets',
+  target: 'https://lifebyte-28216.zendesk.com/hc/en-us',
   email: 'rock.luo@lifebyte.io',
   name: 'Rock Luo',
   externalId: '12345',
@@ -212,7 +212,7 @@ function ZendeskDemo() {
   const ready = healthStatus === 'ok';
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <Title level={3} style={{ margin: 0 }}>Zendesk Help Center — JWT SSO Demo</Title>
 
       <Paragraph type="secondary" style={{ margin: 0 }}>

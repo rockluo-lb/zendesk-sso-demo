@@ -1,8 +1,7 @@
 import { Form, Input, Modal } from 'antd';
 import { useEffect } from 'react';
 import type { Article } from '../types';
-
-const { TextArea } = Input;
+import { RichTextEditor } from './RichTextEditor';
 
 type EditContentModalProps = {
   open: boolean;
@@ -32,15 +31,15 @@ function EditContentModal({ open, article, onSubmit, onCancel }: EditContentModa
       onOk={handleOk}
       onCancel={onCancel}
       okText="Save"
-      width={720}
+      width={860}
       destroyOnClose
     >
       <Form form={form} layout="vertical" preserve={false}>
         <Form.Item name="title" label="Title" rules={[{ required: true }]}>
           <Input />
         </Form.Item>
-        <Form.Item name="body" label="Body (HTML)">
-          <TextArea rows={14} />
+        <Form.Item name="body" label="Body">
+          <RichTextEditor placeholder="Write article content here..." />
         </Form.Item>
       </Form>
     </Modal>

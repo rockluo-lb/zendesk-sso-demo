@@ -7,3 +7,4 @@ export { CategoryModal } from './CategoryModal';
 export { SectionModal } from './SectionModal';
 export { ArticleModal } from './ArticleModal';
 export { EditContentModal } from './EditContentModal';
+export { RichTextEditor } from './RichTextEditor';

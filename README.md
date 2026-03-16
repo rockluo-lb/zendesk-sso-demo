@@ -12,7 +12,6 @@
 | 展示方式 | 新标签页 / 弹窗窗口 | 完全嵌入业务系统 UI |
 | 功能完整性 | Zendesk 原生完整功能 | 文章浏览 + 搜索 |
 | 开发成本 | 低 | 中 |
-| Zendesk 计划要求 | Support 系列即可 | Suite 系列（需 Guide 模块） |
 | iframe 嵌入 | ❌ 被 Zendesk 安全策略阻止 | 不涉及 |
 
 ---
@@ -41,9 +40,6 @@
 - 核心 API 端点（Categories / Sections / Articles / Search）
 - 后端代理层实现（Node.js / Java / Python）
 - 前端集成示例（React）
-- 踩坑记录（SSL 证书、认证问题、计划限制）
-
-**状态：⚠️ 需要 Suite 系列计划（含 Guide 模块）**
 
 ---
 

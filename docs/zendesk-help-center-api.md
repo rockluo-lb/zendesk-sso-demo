@@ -9,11 +9,13 @@
   - [1.2 创建 API Token](#12-创建-api-token)
 - [第二部分：API 认证方式](#第二部分api-认证方式)
 - [第三部分：核心 API 端点](#第三部分核心-api-端点)
-  - [3.1 获取分类列表](#31-获取分类列表)
-  - [3.2 获取分类下的 Sections](#32-获取分类下的-sections)
-  - [3.3 获取 Section 下的文章列表](#33-获取-section-下的文章列表)
-  - [3.4 获取单篇文章详情](#34-获取单篇文章详情)
-  - [3.5 搜索文章](#35-搜索文章)
+  - [3.1 Categories（分类管理）](#31-categories分类管理)
+  - [3.2 Sections（章节管理）](#32-sections章节管理)
+  - [3.3 Articles（文章管理）](#33-articles文章管理)
+  - [3.4 Article Attachments（文章附件）](#34-article-attachments文章附件)
+  - [3.5 Search（搜索）](#35-search搜索)
+  - [3.6 Translations（多语言翻译）](#36-translations多语言翻译)
+  - [3.7 API 能力总览](#37-api-能力总览)
 - [第四部分：技术实现 — 后端代理层](#第四部分技术实现--后端代理层)
   - [4.1 为什么需要代理层](#41-为什么需要代理层)
   - [4.2 Node.js / Express 实现](#42-nodejs--express-实现)
@@ -27,11 +29,14 @@
 
 ## 方案概述
 
-通过 Zendesk Help Center REST API，在业务系统内部构建自定义的文档浏览界面，实现：
+通过 Zendesk Help Center REST API，在业务系统内部构建自定义的知识库管理界面，实现：
 
 - 分类（Categories）→ 章节（Sections）→ 文章（Articles）的层级浏览
 - 全文搜索文章
 - 直接渲染文章 HTML 内容
+- **文章的创建、编辑、删除（归档）**
+- **附件上传与管理**（图片、PDF 等，单文件最大 20MB）
+- **多语言翻译管理**
 - 完全嵌入业务系统，无需跳转到 Zendesk 页面
 
 **与 JWT SSO 方案的对比**：
@@ -39,7 +44,7 @@
 | 维度 | JWT SSO（新标签页/弹窗） | Help Center API |
 |------|------------------------|-----------------|
 | 用户体验 | 跳转到 Zendesk 页面 | 完全嵌入业务系统内 |
-| 功能完整性 | Zendesk 原生完整功能 | 仅文章浏览和搜索 |
+| 功能完整性 | Zendesk 原生完整功能 | 完整 CRUD + 搜索 + 附件 + 多语言 |
 | 开发成本 | 低（只需 BridgePage） | 中（需要自建 UI） |
 | Zendesk 计划要求 | Support 系列即可 | **Suite 系列**（需要 Guide 模块） |
 | 维护成本 | 低 | 中（需跟进 API 变更） |
@@ -135,11 +140,19 @@ curl "https://{subdomain}.zendesk.com/api/v2/users/me.json" \
 
 所有端点的 Base URL 为：`https://{subdomain}.zendesk.com`
 
-### 3.1 获取分类列表
+> 官方文档：[Help Center API Reference](https://developer.zendesk.com/api-reference/help_center/help-center-api/introduction/)
 
-```
-GET /api/v2/help_center/{locale}/categories
-```
+---
+
+### 3.1 Categories（分类管理）
+
+#### 查询
+
+| 操作 | 方法 | 端点 | 权限 |
+|------|------|------|------|
+| 列出所有分类 | `GET` | `/api/v2/help_center/categories` | Agents |
+| 按语言列出分类 | `GET` | `/api/v2/help_center/{locale}/categories` | Anonymous |
+| 获取单个分类 | `GET` | `/api/v2/help_center/categories/{category_id}` | Agents |
 
 **响应示例**：
 
@@ -163,31 +176,288 @@ GET /api/v2/help_center/{locale}/categories
 }
 ```
 
-### 3.2 获取分类下的 Sections
+#### 创建
 
-```
-GET /api/v2/help_center/categories/{category_id}/sections
-```
+| 方法 | 端点 | 权限 |
+|------|------|------|
+| `POST` | `/api/v2/help_center/categories` | Help Center managers |
+| `POST` | `/api/v2/help_center/{locale}/categories` | Help Center managers |
 
-**响应字段**：`sections[]` — 包含 `id`、`name`、`description`、`html_url`、`category_id`
+**请求体**：
 
-### 3.3 获取 Section 下的文章列表
-
-```
-GET /api/v2/help_center/sections/{section_id}/articles
-```
-
-**响应字段**：`articles[]` — 包含 `id`、`title`、`body`（HTML）、`html_url`、`label_names`、`created_at`、`updated_at`
-
-### 3.4 获取单篇文章详情
-
-```
-GET /api/v2/help_center/articles/{article_id}
+```json
+{
+  "category": {
+    "position": 2,
+    "locale": "en-us",
+    "name": "Getting Started",
+    "description": "Guides for new users"
+  }
+}
 ```
 
-**响应字段**：`article` — 完整文章对象，`body` 字段为 HTML 格式的文章内容，可直接渲染
+支持在创建时指定多语言翻译：
 
-### 3.5 搜索文章
+```json
+{
+  "category": {
+    "position": 2,
+    "translations": [
+      { "locale": "en-us", "title": "Getting Started", "body": "Guides for new users" },
+      { "locale": "zh-cn", "title": "快速入门", "body": "新用户指南" }
+    ]
+  }
+}
+```
+
+#### 更新
+
+| 方法 | 端点 | 权限 |
+|------|------|------|
+| `PUT` | `/api/v2/help_center/categories/{category_id}` | Help Center managers |
+
+**请求体**：
+
+```json
+{
+  "category": {
+    "position": 3
+  }
+}
+```
+
+> 该端点仅更新分类级别的元数据（如排序位置），不更新翻译内容。翻译内容需通过 [Translations API](https://developer.zendesk.com/api-reference/help_center/help-center-api/translations/) 更新。
+
+#### 删除
+
+| 方法 | 端点 | 权限 |
+|------|------|------|
+| `DELETE` | `/api/v2/help_center/categories/{category_id}` | Help Center managers |
+
+> 删除分类会同时删除其下所有 Sections 和 Articles。
+
+---
+
+### 3.2 Sections（章节管理）
+
+#### 查询
+
+| 操作 | 方法 | 端点 | 权限 |
+|------|------|------|------|
+| 列出所有章节 | `GET` | `/api/v2/help_center/sections` | Agents |
+| 列出分类下的章节 | `GET` | `/api/v2/help_center/categories/{category_id}/sections` | Agents |
+| 获取单个章节 | `GET` | `/api/v2/help_center/sections/{section_id}` | Agents |
+
+**响应字段**：`sections[]` — 包含 `id`、`name`、`description`、`html_url`、`category_id`、`parent_section_id`（Enterprise）
+
+#### 创建
+
+| 方法 | 端点 | 权限 |
+|------|------|------|
+| `POST` | `/api/v2/help_center/categories/{category_id}/sections` | Help Center managers |
+
+**请求体**：
+
+```json
+{
+  "section": {
+    "locale": "en-us",
+    "name": "Billing FAQ",
+    "description": "Common billing questions",
+    "position": 1
+  }
+}
+```
+
+#### 更新
+
+| 方法 | 端点 | 权限 |
+|------|------|------|
+| `PUT` | `/api/v2/help_center/sections/{section_id}` | Help Center managers |
+
+**请求体**：
+
+```json
+{
+  "section": {
+    "position": 2,
+    "category_id": 12345
+  }
+}
+```
+
+> 可通过修改 `category_id` 将 Section 移动到另一个 Category 下。
+
+#### 删除
+
+| 方法 | 端点 | 权限 |
+|------|------|------|
+| `DELETE` | `/api/v2/help_center/sections/{section_id}` | Help Center managers |
+
+> 删除 Section 会同时删除其下所有 Articles。
+
+---
+
+### 3.3 Articles（文章管理）
+
+#### 查询
+
+| 操作 | 方法 | 端点 | 权限 |
+|------|------|------|------|
+| 列出所有文章 | `GET` | `/api/v2/help_center/articles` | Anonymous |
+| 列出章节下的文章 | `GET` | `/api/v2/help_center/sections/{section_id}/articles` | Anonymous |
+| 列出分类下的文章 | `GET` | `/api/v2/help_center/categories/{category_id}/articles` | Anonymous |
+| 列出用户的文章 | `GET` | `/api/v2/help_center/users/{user_id}/articles` | Anonymous |
+| 获取单篇文章 | `GET` | `/api/v2/help_center/articles/{article_id}` | Agents |
+| 增量获取文章 | `GET` | `/api/v2/help_center/incremental/articles?start_time={unix_ts}` | Anonymous |
+
+**查询参数**：
+
+| 参数 | 说明 |
+|------|------|
+| `sort_by` | `position`（默认）、`title`、`created_at`、`updated_at`、`edited_at` |
+| `sort_order` | `asc` 或 `desc` |
+| `label_names` | 按标签过滤（逗号分隔，AND 逻辑） |
+| `start_time` | 增量获取的起始时间（Unix 时间戳） |
+
+**响应字段**：`articles[]` — 包含 `id`、`title`、`body`（HTML）、`html_url`、`label_names`、`draft`、`promoted`、`created_at`、`updated_at`
+
+**Sideloads**：可通过 `include` 参数附带加载 `users`（作者）、`sections`、`categories`、`translations`
+
+#### 创建
+
+| 方法 | 端点 | 权限 |
+|------|------|------|
+| `POST` | `/api/v2/help_center/sections/{section_id}/articles` | Agents |
+
+**请求体**：
+
+```json
+{
+  "article": {
+    "title": "How to reset your password",
+    "body": "<p>Follow these steps to reset your password...</p>",
+    "locale": "en-us",
+    "user_segment_id": null,
+    "permission_group_id": 56,
+    "draft": false,
+    "promoted": false,
+    "label_names": ["password", "account"]
+  },
+  "notify_subscribers": false
+}
+```
+
+**必填字段**：`title`、`locale`（或 URL 中指定）、`permission_group_id`、`user_segment_id`
+
+> `user_segment_id` 设为 `null` 表示所有人可见。`notify_subscribers: false` 可避免批量创建时发送大量通知邮件。
+
+#### 更新
+
+| 方法 | 端点 | 权限 |
+|------|------|------|
+| `PUT` | `/api/v2/help_center/articles/{article_id}` | Agents |
+
+**请求体**：
+
+```json
+{
+  "article": {
+    "promoted": true,
+    "position": 1,
+    "comments_disabled": false,
+    "label_names": ["updated", "important"]
+  }
+}
+```
+
+> **该端点仅更新文章级元数据**（promoted、position、comments_disabled、label_names 等），**不更新文章标题和正文内容**。要更新标题和正文，需使用 [Translations API](https://developer.zendesk.com/api-reference/help_center/help-center-api/translations/)：
+>
+> ```
+> PUT /api/v2/help_center/articles/{article_id}/translations/{locale}
+> ```
+>
+> ```json
+> {
+>   "translation": {
+>     "title": "Updated title",
+>     "body": "<p>Updated content...</p>"
+>   }
+> }
+> ```
+
+#### 删除（归档）
+
+| 方法 | 端点 | 权限 |
+|------|------|------|
+| `DELETE` | `/api/v2/help_center/articles/{article_id}` | Agents |
+
+> DELETE 操作实际上是**归档**文章，而非永久删除。可在 Zendesk Help Center 管理界面中恢复归档的文章。
+
+---
+
+### 3.4 Article Attachments（文章附件）
+
+#### 查询
+
+| 操作 | 方法 | 端点 | 权限 |
+|------|------|------|------|
+| 列出文章的附件 | `GET` | `/api/v2/help_center/articles/{article_id}/attachments` | End users / Agents |
+| 获取单个附件 | `GET` | `/api/v2/help_center/articles/attachments/{attachment_id}` | End users / Agents |
+
+**附件字段**：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | number | 附件 ID |
+| `article_id` | number | 关联文章 ID |
+| `file_name` | string | 文件名 |
+| `content_type` | string | MIME 类型（如 `image/png`、`application/pdf`） |
+| `content_url` | string | 文件下载 URL |
+| `size` | number | 文件大小（字节） |
+| `inline` | boolean | 是否为内联附件（嵌入文章正文的图片） |
+
+#### 上传附件
+
+| 方法 | 端点 | 权限 |
+|------|------|------|
+| `POST` | `/api/v2/help_center/articles/{article_id}/attachments` | Agents |
+| `POST` | `/api/v2/help_center/articles/attachments`（未关联） | Agents |
+
+**上传方式**：使用 `multipart/form-data`
+
+```bash
+curl https://{subdomain}.zendesk.com/api/v2/help_center/articles/{article_id}/attachments \
+  -F "file=@/path/to/image.png" \
+  -F "inline=true" \
+  -u {email}/token:{api_token}
+```
+
+> 单个附件大小限制为 **20 MB**。`inline=true` 表示图片直接嵌入文章正文。
+
+#### 批量关联附件
+
+| 方法 | 端点 | 权限 |
+|------|------|------|
+| `POST` | `/api/v2/help_center/articles/{article_id}/bulk_attachments` | Agents |
+
+```json
+{
+  "attachment_ids": [10001, 10002, 10003]
+}
+```
+
+> 每次最多关联 **20 个**附件。先通过未关联端点上传，再批量关联到文章。
+
+#### 删除附件
+
+| 方法 | 端点 | 权限 |
+|------|------|------|
+| `DELETE` | `/api/v2/help_center/articles/attachments/{attachment_id}` | Agents |
+
+---
+
+### 3.5 Search（搜索）
 
 ```
 GET /api/v2/help_center/articles/search?query={keyword}
@@ -207,6 +477,58 @@ GET /api/v2/help_center/articles/search?query={keyword}
 **响应字段**：`results[]` — 文章列表，结构同 articles
 
 > 搜索端点支持匿名访问（不带认证），但返回的结果仅限公开文章。
+
+---
+
+### 3.6 Translations（多语言翻译）
+
+Zendesk Help Center 支持多语言内容。文章的 `title` 和 `body` 实际上是翻译属性，通过 Translations API 管理。
+
+| 操作 | 方法 | 端点 |
+|------|------|------|
+| 列出文章翻译 | `GET` | `/api/v2/help_center/articles/{article_id}/translations` |
+| 获取特定语言翻译 | `GET` | `/api/v2/help_center/articles/{article_id}/translations/{locale}` |
+| 创建翻译 | `POST` | `/api/v2/help_center/articles/{article_id}/translations` |
+| 更新翻译 | `PUT` | `/api/v2/help_center/articles/{article_id}/translations/{locale}` |
+| 删除翻译 | `DELETE` | `/api/v2/help_center/articles/{article_id}/translations/{locale}` |
+| 列出缺失翻译 | `GET` | `/api/v2/help_center/articles/{article_id}/translations/missing` |
+
+**更新文章标题和正文**：
+
+```bash
+curl -X PUT \
+  https://{subdomain}.zendesk.com/api/v2/help_center/articles/{article_id}/translations/{locale} \
+  -H "Content-Type: application/json" \
+  -u {email}/token:{api_token} \
+  -d '{
+    "translation": {
+      "title": "Updated article title",
+      "body": "<p>Updated HTML content</p>",
+      "draft": false
+    }
+  }'
+```
+
+> Categories 和 Sections 同样支持 Translations API，端点结构一致。
+
+---
+
+### 3.7 API 能力总览
+
+| 资源 | 查询 | 创建 | 更新 | 删除 | 附件 | 翻译 |
+|------|------|------|------|------|------|------|
+| Categories | ✅ | ✅ | ✅ | ✅ | — | ✅ |
+| Sections | ✅ | ✅ | ✅ | ✅ | — | ✅ |
+| Articles | ✅ | ✅ | ✅ | ✅（归档） | ✅ | ✅ |
+| Search | ✅ | — | — | — | — | — |
+
+**权限说明**：
+
+| 角色 | 能力 |
+|------|------|
+| Anonymous / End users | 查询公开内容、搜索 |
+| Agents | 完整 CRUD（受 permission_group 限制） |
+| Guide admins / HC managers | 管理 Categories、Sections、权限组 |
 
 ---
 
